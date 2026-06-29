@@ -26,25 +26,19 @@
     #info .change.neutral{color:#8a8a8a}
     #info .hint{font-size:11px;margin-top:12px;color:rgba(0,0,0,0.35);letter-spacing:0.03em}
     #info .attractor{font-size:10px;margin-top:4px;color:rgba(0,0,0,0.3);letter-spacing:0.3px;font-weight:400}
-    #datasource{
-      position:fixed;bottom:60px;left:0;right:0;text-align:center;
-      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-      font-size:10px;color:rgba(0,0,0,0.3);letter-spacing:0.3px;
-      pointer-events:none;padding:0 20px
-    }
     #stamp{
-      position:fixed;bottom:80px;right:32px;
+      position:fixed;bottom:76px;right:32px;
       font-size:11px;color:#c62828;opacity:0.5;
       font-family:serif;letter-spacing:0.1em;
       pointer-events:none;transform:rotate(-5deg)
     }
-    #databar{position:fixed;bottom:56px;left:0;right:0;text-align:center;color:rgba(0,0,0,0.25);font:10px/1.2 system-ui,sans-serif;letter-spacing:0.8px;pointer-events:none;z-index:10;font-style:italic}
+    #databar{position:fixed;bottom:60px;left:0;right:0;text-align:center;color:rgba(0,0,0,0.35);font:10px/1.4 system-ui,sans-serif;letter-spacing:0.8px;pointer-events:none;z-index:10}
     @media(max-width:600px){
       #info{top:16px;left:16px}
       #info .coin{font-size:18px}
       #info .change{font-size:12px}
       #desc{font-size:11px;bottom:16px}
-      #datasource{bottom:50px;font-size:9px}
+      #databar{bottom:50px}
       #stamp{display:none}
     }
   </style>
@@ -59,7 +53,6 @@
   <div class="attractor" id="attractorType">Lorenz</div>
 </div>
 <div id="stamp">⚡ trace</div>
-<div id="datasource">CoinGecko · BTC · updated just now</div>
 <div id="databar">CoinGecko · BTC · loading...</div>
 <script>
 // ─── CONFIG ───
@@ -120,17 +113,6 @@ const coinNameEl = document.getElementById('coinName');
 const priceChangeEl = document.getElementById('priceChange');
 const tapHintEl = document.getElementById('tapHint');
 const attractorTypeEl = document.getElementById('attractorType');
-const datasourceEl = document.getElementById('datasource');
-
-function updateDatasource(coin) {
-  const symbol = (coin?.symbol || 'BTC').toUpperCase();
-  const secs = Math.floor((Date.now() - lastFetchTime) / 1000);
-  let ago;
-  if (secs < 5) ago = 'just now';
-  else if (secs < 60) ago = secs + 's ago';
-  else ago = Math.floor(secs / 60) + 'm ago';
-  datasourceEl.textContent = 'CoinGecko · ' + symbol + ' · updated ' + ago;
-}
 
 // ─── SCALE ───
 function calcScale() {
@@ -206,8 +188,6 @@ function updateCoinDisplay() {
   }
   // Attractor state label
   attractorTypeEl.textContent = 'Lorenz attractor';
-  // Update datasource
-  updateDatasource(coin);
   // Map volatility to attractor rho
   const volatility = pc != null ? Math.abs(pc) : 1;
   targetRho = C.rho + Math.min(volatility / 5, C.rhoRange);
@@ -359,11 +339,8 @@ async function init() {
   
   // Periodic refresh
   setInterval(fetchCoins, C.refreshMs);
-  
+
   draw();
-  
-  // Update datasource timer every 5s
-  setInterval(() => { updateDatasource(getCurrentCoin()); }, 5000);
 }
 
 init();
