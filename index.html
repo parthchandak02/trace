@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Trace — Strange Attractors</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    html,body{width:100%;height:100%;overflow:hidden;background:#f5f0e6}
+    canvas{display:block;touch-action:manipulation;cursor:pointer}
+    #desc{
+      position:fixed;bottom:24px;left:0;right:0;text-align:center;
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+      font-size:13px;color:rgba(0,0,0,0.45);letter-spacing:0.02em;
+      pointer-events:none;padding:0 20px;line-height:1.5
+    }
+    #info{
+      position:fixed;top:24px;left:24px;
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+      pointer-events:none
+    }
+    #info .coin{font-size:22px;font-weight:600;color:#1a1a1a;letter-spacing:-0.01em}
+    #info .change{font-size:14px;margin-top:4px;font-weight:400;letter-spacing:0.01em}
+    #info .change.up{color:#c62828}
+    #info .change.down{color:#8a8a8a}
+    #info .change.neutral{color:#8a8a8a}
+    #info .hint{font-size:11px;margin-top:12px;color:rgba(0,0,0,0.35);letter-spacing:0.03em}
+    #stamp{
+      position:fixed;bottom:80px;right:32px;
+      font-size:11px;color:#c62828;opacity:0.5;
+      font-family:serif;letter-spacing:0.1em;
+      pointer-events:none;transform:rotate(-5deg)
+    }
+    @media(max-width:600px){
+      #info{top:16px;left:16px}
+      #info .coin{font-size:18px}
+      #info .change{font-size:12px}
+      #desc{font-size:11px;bottom:16px}
+      #stamp{display:none}
+    }
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="desc">Crypto volatility draws strange attractors in sumi ink — each coin's price chaos paints a unique butterfly</div>
+<div id="info">
+  <div class="coin" id="coinName">bitcoin</div>
+  <div class="change" id="priceChange">—</div>
+  <div class="hint" id="tapHint">tap to cycle</div>
+</div>
+<div id="stamp">⚡ trace</div>
+<script>
+// ─── CONFIG ───
+const C = {
+  // Lorenz attractor defaults
+  sigma: 10,
+  rho: 28,
+  beta: 8/3,
+  rhoRange: 8,          // volatility maps rho in [28-8, 28+8]
+  dt: 0.012,
+  maxPoints: 5000,
+  warmupSteps: 6000,
+  warmupDt: 0.012,
+  fadeEvery: 300,        // frames between subtle fades
+  fadeAlpha: 0.02,
+  maxSegWidth: 7,
+  minSegWidth: 0.5,
+  apiUrl: 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=10&page=1&sparkline=false',
+  refreshMs: 120000,     // refresh price data every 2 min
+};
+
+// ─── PALETTE (Bold — Sumi) ───
+const P = {
+  bg: '#f5f0e6',
+  ink1: '#1a1a1a',
+  ink2: '#4a4a4a',
+  ink3: '#8a8a8a',
+  accent: '#c62828',
+  text: 'rgba(0,0,0,0.7)',
+};
+
+// ─── CANVAS ───
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ─── STATE ───
+let coins = [];
+let coinIndex = 0;
+let attractor = { x: 0.1, y: 0.1, z: 0.1 };
+let path = [];            // [{x,y,z,speed}...]
+let frameCount = 0;
+let tick = 0;
+let currentRho = C.rho;
+let targetRho = C.rho;
+let scale, offX, offY;
+let loaded = false;
+
+// ─── DOM REFS ───
+const coinNameEl = document.getElementById('coinName');
+const priceChangeEl = document.getElementById('priceChange');
+const tapHintEl = document.getElementById('tapHint');
+
+// ─── SCALE ───
+function calcScale() {
+  scale = Math.min(W, H) / 20;
+  offX = W / 2;
+  offY = H / 2;
+}
+
+// ─── LORENZ STEP ───
+function lorenzStep(s, x, y, z, dt) {
+  const dx = s.sigma * (y - x) * dt;
+  const dy = (x * (s.rho - z) - y) * dt;
+  const dz = (x * y - s.beta * z) * dt;
+  return { x: x + dx, y: y + dy, z: z + dz, dx, dy, dz };
+}
+
+function getSpeed(dx, dy, dz) {
+  // dx,dy,dz are step displacements, convert to rate/s
+  return Math.sqrt(dx*dx + dy*dy + dz*dz) / C.dt;
+}
+
+// ─── DATA ───
+async function fetchCoins() {
+  try {
+    const r = await fetch(C.apiUrl);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    if (!data || !data.length) throw new Error('empty data');
+    coins = data;
+    if (!loaded) {
+      loaded = true;
+      tapHintEl.textContent = '';
+      coinIndex = 0;
+      updateCoinDisplay();
+      resetAttractor();
+    }
+  } catch(e) {
+    console.warn('CoinGecko fetch failed, using fallback:', e.message);
+    if (!loaded) {
+      coins = [
+        { id:'bitcoin', symbol:'btc', name:'Bitcoin', current_price:59000, price_change_percentage_24h:-1.59 },
+        { id:'ethereum', symbol:'eth', name:'Ethereum', current_price:1550, price_change_percentage_24h:-0.77 },
+        { id:'cardano', symbol:'ada', name:'Cardano', current_price:0.32, price_change_percentage_24h:2.1 },
+      ];
+      loaded = true;
+      tapHintEl.textContent = '';
+      updateCoinDisplay();
+      resetAttractor();
+    }
+  }
+}
+
+function getCurrentCoin() {
+  if (!coins.length) return null;
+  return coins[coinIndex % coins.length];
+}
+
+function updateCoinDisplay() {
+  const coin = getCurrentCoin();
+  if (!coin) return;
+  coinNameEl.textContent = coin.name;
+  const pc = coin.price_change_percentage_24h;
+  if (pc == null) {
+    priceChangeEl.textContent = '-';
+    priceChangeEl.className = 'change neutral';
+  } else {
+    const sign = pc >= 0 ? '+' : '';
+    priceChangeEl.textContent = sign + pc.toFixed(2) + '% (24h)';
+    priceChangeEl.className = 'change ' + (pc > 0 ? 'up' : pc < 0 ? 'down' : 'neutral');
+  }
+  // Map volatility to attractor rho
+  const volatility = pc != null ? Math.abs(pc) : 1;
+  targetRho = C.rho + Math.min(volatility / 5, C.rhoRange);
+  // Also adjust sigma slightly by volatility
+  // (no change needed, rho is the main chaos parameter)
+}
+
+function nextCoin() {
+  if (!coins.length) return;
+  coinIndex = (coinIndex + 1) % coins.length;
+  updateCoinDisplay();
+  resetAttractor();
+}
+
+// ─── ATTRACTOR ───
+function resetAttractor() {
+  const coin = getCurrentCoin();
+  if (!coin) return;
+  // Seed attractor position based on coin id hash for visual variety
+  const seed = coin.id.split('').reduce((a,c) => a + c.charCodeAt(0), 0) % 20;
+  attractor = {
+    x: 0.1 + (seed % 5) * 0.05,
+    y: 0.1 + ((seed >> 2) % 5) * 0.05,
+    z: 0.1 + ((seed >> 4) % 5) * 0.05,
+  };
+  path = [];
+  frameCount = 0;
+  tick = 0;
+  // Warmup: run attractor to settle onto the strange attractor surface
+  const s = { sigma: C.sigma, rho: targetRho, beta: C.beta };
+  let a = { ...attractor };
+  for (let i = 0; i < C.warmupSteps; i++) {
+    const n = lorenzStep(s, a.x, a.y, a.z, C.warmupDt);
+    a = { x: n.x, y: n.y, z: n.z };
+  }
+  attractor = a;
+  // Clear canvas to fresh paper
+  ctx.fillStyle = P.bg;
+  ctx.fillRect(0, 0, W, H);
+  calcScale();
+}
+
+// ─── DRAW ───
+function draw() {
+  calcScale();
+  
+  // Ink bleed effect — subtle fade every N frames
+  frameCount++;
+  if (frameCount % C.fadeEvery === 0 && tick > 100) {
+    ctx.fillStyle = P.bg;
+    ctx.globalAlpha = C.fadeAlpha;
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 1;
+  }
+
+  // Step attractor
+  const s = { sigma: C.sigma, rho: targetRho, beta: C.beta };
+  // Smooth rho transitions
+  currentRho += (targetRho - currentRho) * 0.01;
+  s.rho = currentRho;
+
+  const n = lorenzStep(s, attractor.x, attractor.y, attractor.z, C.dt);
+  const speed = getSpeed(n.dx, n.dy, n.dz);
+
+  const px = attractor.x * scale + offX;
+  const py = attractor.y * scale + offY;
+  const nx = n.x * scale + offX;
+  const ny = n.y * scale + offY;
+
+  // Variable brush stroke: slow = thick, fast = thin
+  // Speed range ~5-50 units/s; map to width 0.5-7px
+  const w = Math.max(C.minSegWidth, C.maxSegWidth - speed / 10);
+
+  // Ink color: deeper in z = darker ink, near wings = full black
+  const zDepth = Math.abs(n.z) / 60;
+  const alpha = Math.max(0.3, 1 - zDepth * 0.4);
+
+  ctx.beginPath();
+  ctx.moveTo(px, py);
+  ctx.lineTo(nx, ny);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = w;
+  ctx.strokeStyle = `rgba(26,26,26,${alpha.toFixed(3)})`;
+  ctx.stroke();
+
+  // Draw vermillion accent dot occasionally (like a sumi seal stamp)
+  if (tick % 300 === 0 && tick > 0) {
+    const stampSize = 3 + Math.random() * 2;
+    ctx.beginPath();
+    ctx.arc(nx, ny, stampSize, 0, Math.PI * 2);
+    ctx.fillStyle = P.accent;
+    ctx.globalAlpha = 0.3;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  // Store point
+  path.push({ x: n.x, y: n.y, z: n.z, speed });
+  attractor = { x: n.x, y: n.y, z: n.z };
+  tick++;
+
+  // Reset if path gets too long — start fresh on same coin
+  if (tick > C.maxPoints) {
+    // Gradual fade to fresh paper
+    ctx.fillStyle = P.bg;
+    ctx.globalAlpha = 0.4;
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 1;
+    // Restart attractor
+    const seed2 = getCurrentCoin()?.id.split('').reduce((a,c) => a + c.charCodeAt(0), 0) || 42;
+    attractor = {
+      x: 0.1 + (seed2 % 7) * 0.03,
+      y: 0.1 + ((seed2 >> 2) % 7) * 0.03,
+      z: 0.1 + ((seed2 >> 4) % 7) * 0.03,
+    };
+    tick = 0;
+    path = [];
+  }
+
+  requestAnimationFrame(draw);
+}
+
+// ─── INTERACTION ───
+// Touch guard
+let touchGuard = false;
+function handleTap(e) {
+  if (touchGuard) return;
+  touchGuard = true;
+  setTimeout(() => { touchGuard = false; }, 300);
+  e.preventDefault();
+  nextCoin();
+}
+
+canvas.addEventListener('click', handleTap);
+canvas.addEventListener('touchend', handleTap);
+
+// ─── START ───
+async function init() {
+  ctx.fillStyle = P.bg;
+  ctx.fillRect(0, 0, W, H);
+  calcScale();
+  
+  await fetchCoins();
+  
+  // Periodic refresh
+  setInterval(fetchCoins, C.refreshMs);
+  
+  draw();
+}
+
+init();
+</script>
+</body>
+</html>
