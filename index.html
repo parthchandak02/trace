@@ -25,17 +25,26 @@
     #info .change.down{color:#8a8a8a}
     #info .change.neutral{color:#8a8a8a}
     #info .hint{font-size:11px;margin-top:12px;color:rgba(0,0,0,0.35);letter-spacing:0.03em}
+    #info .attractor{font-size:10px;margin-top:4px;color:rgba(0,0,0,0.3);letter-spacing:0.3px;font-weight:400}
+    #datasource{
+      position:fixed;bottom:60px;left:0;right:0;text-align:center;
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+      font-size:10px;color:rgba(0,0,0,0.3);letter-spacing:0.3px;
+      pointer-events:none;padding:0 20px
+    }
     #stamp{
       position:fixed;bottom:80px;right:32px;
       font-size:11px;color:#c62828;opacity:0.5;
       font-family:serif;letter-spacing:0.1em;
       pointer-events:none;transform:rotate(-5deg)
     }
+    #databar{position:fixed;bottom:56px;left:0;right:0;text-align:center;color:rgba(0,0,0,0.25);font:10px/1.2 system-ui,sans-serif;letter-spacing:0.8px;pointer-events:none;z-index:10;font-style:italic}
     @media(max-width:600px){
       #info{top:16px;left:16px}
       #info .coin{font-size:18px}
       #info .change{font-size:12px}
       #desc{font-size:11px;bottom:16px}
+      #datasource{bottom:50px;font-size:9px}
       #stamp{display:none}
     }
   </style>
@@ -47,8 +56,11 @@
   <div class="coin" id="coinName">bitcoin</div>
   <div class="change" id="priceChange">—</div>
   <div class="hint" id="tapHint">tap to cycle</div>
+  <div class="attractor" id="attractorType">Lorenz</div>
 </div>
 <div id="stamp">⚡ trace</div>
+<div id="datasource">CoinGecko · BTC · updated just now</div>
+<div id="databar">CoinGecko · BTC · loading...</div>
 <script>
 // ─── CONFIG ───
 const C = {
@@ -93,6 +105,7 @@ window.addEventListener('resize', resize);
 // ─── STATE ───
 let coins = [];
 let coinIndex = 0;
+let lastFetchTime = performance.now();
 let attractor = { x: 0.1, y: 0.1, z: 0.1 };
 let path = [];            // [{x,y,z,speed}...]
 let frameCount = 0;
@@ -106,6 +119,18 @@ let loaded = false;
 const coinNameEl = document.getElementById('coinName');
 const priceChangeEl = document.getElementById('priceChange');
 const tapHintEl = document.getElementById('tapHint');
+const attractorTypeEl = document.getElementById('attractorType');
+const datasourceEl = document.getElementById('datasource');
+
+function updateDatasource(coin) {
+  const symbol = (coin?.symbol || 'BTC').toUpperCase();
+  const secs = Math.floor((Date.now() - lastFetchTime) / 1000);
+  let ago;
+  if (secs < 5) ago = 'just now';
+  else if (secs < 60) ago = secs + 's ago';
+  else ago = Math.floor(secs / 60) + 'm ago';
+  datasourceEl.textContent = 'CoinGecko · ' + symbol + ' · updated ' + ago;
+}
 
 // ─── SCALE ───
 function calcScale() {
@@ -135,6 +160,7 @@ async function fetchCoins() {
     const data = await r.json();
     if (!data || !data.length) throw new Error('empty data');
     coins = data;
+    lastFetchTime = performance.now();
     if (!loaded) {
       loaded = true;
       tapHintEl.textContent = '';
@@ -150,6 +176,7 @@ async function fetchCoins() {
         { id:'ethereum', symbol:'eth', name:'Ethereum', current_price:1550, price_change_percentage_24h:-0.77 },
         { id:'cardano', symbol:'ada', name:'Cardano', current_price:0.32, price_change_percentage_24h:2.1 },
       ];
+      lastFetchTime = performance.now();
       loaded = true;
       tapHintEl.textContent = '';
       updateCoinDisplay();
@@ -173,14 +200,17 @@ function updateCoinDisplay() {
     priceChangeEl.className = 'change neutral';
   } else {
     const sign = pc >= 0 ? '+' : '';
-    priceChangeEl.textContent = sign + pc.toFixed(2) + '% (24h)';
+    const arrow = pc > 0 ? '▲' : '▼';
+    priceChangeEl.textContent = sign + pc.toFixed(2) + '% (24h) ' + arrow;
     priceChangeEl.className = 'change ' + (pc > 0 ? 'up' : pc < 0 ? 'down' : 'neutral');
   }
+  // Attractor state label
+  attractorTypeEl.textContent = 'Lorenz attractor';
+  // Update datasource
+  updateDatasource(coin);
   // Map volatility to attractor rho
   const volatility = pc != null ? Math.abs(pc) : 1;
   targetRho = C.rho + Math.min(volatility / 5, C.rhoRange);
-  // Also adjust sigma slightly by volatility
-  // (no change needed, rho is the main chaos parameter)
 }
 
 function nextCoin() {
@@ -296,6 +326,12 @@ function draw() {
     path = [];
   }
 
+  // Update data bar
+  const coin = getCurrentCoin();
+  if (coin) {
+    updateDataBar(coin.current_price, coin.price_change_percentage_24h || 0, attractorTypeEl.textContent);
+  }
+
   requestAnimationFrame(draw);
 }
 
@@ -325,9 +361,21 @@ async function init() {
   setInterval(fetchCoins, C.refreshMs);
   
   draw();
+  
+  // Update datasource timer every 5s
+  setInterval(() => { updateDatasource(getCurrentCoin()); }, 5000);
 }
 
 init();
+
+// ─── DATA BAR ───
+function updateDataBar(price, change, attractor) {
+  const el = document.getElementById('databar');
+  if (!el) return;
+  const arrow = change >= 0 ? '↑' : '↓';
+  const ago = Math.round((performance.now() - lastFetchTime) / 1000);
+  el.textContent = `CoinGecko · BTC $${price} ${arrow} ${Math.abs(change)}% · ${attractor} · ${ago}s ago`;
+}
 </script>
 </body>
 </html>
