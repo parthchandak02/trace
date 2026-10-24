@@ -135,6 +135,8 @@ function getSpeed(dx, dy, dz) {
 }
 
 // ─── DATA ───
+// Where the coins on screen came from: live CoinGecko data or the built-in sample
+let dataSource = 'CoinGecko';
 async function fetchCoins() {
   try {
     const r = await fetch(C.apiUrl);
@@ -142,6 +144,7 @@ async function fetchCoins() {
     const data = await r.json();
     if (!data || !data.length) throw new Error('empty data');
     coins = data;
+    dataSource = 'CoinGecko';
     lastFetchTime = performance.now();
     if (!loaded) {
       loaded = true;
@@ -158,6 +161,7 @@ async function fetchCoins() {
         { id:'ethereum', symbol:'eth', name:'Ethereum', current_price:1550, price_change_percentage_24h:-0.77 },
         { id:'cardano', symbol:'ada', name:'Cardano', current_price:0.32, price_change_percentage_24h:2.1 },
       ];
+      dataSource = 'sample data (CoinGecko unavailable)';
       lastFetchTime = performance.now();
       loaded = true;
       tapHintEl.textContent = '';
@@ -351,7 +355,7 @@ function updateDataBar(symbol, price, change, attractor) {
   if (!el) return;
   const arrow = change >= 0 ? '↑' : '↓';
   const ago = Math.round((performance.now() - lastFetchTime) / 1000);
-  el.textContent = `CoinGecko · ${(symbol || '').toUpperCase()} $${price} ${arrow} ${Math.abs(change)}% · ${attractor} · ${ago}s ago`;
+  el.textContent = `${dataSource} · ${(symbol || '').toUpperCase()} $${price} ${arrow} ${Math.abs(change)}% · ${attractor} · ${ago}s ago`;
 }
 </script>
 </body>
