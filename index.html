@@ -53,7 +53,7 @@
   <div class="attractor" id="attractorType">Lorenz</div>
 </div>
 <div id="stamp">⚡ trace</div>
-<div id="databar">CoinGecko · BTC · loading...</div>
+<div id="databar">CoinGecko · loading...</div>
 <script>
 // ─── CONFIG ───
 const C = {
@@ -64,7 +64,7 @@ const C = {
   rhoRange: 8,          // volatility maps rho in [28-8, 28+8]
   dt: 0.012,
   maxPoints: 5000,
-  warmupSteps: 6000,
+  warmupSteps: 3000,
   warmupDt: 0.012,
   fadeEvery: 300,        // frames between subtle fades
   fadeAlpha: 0.02,
@@ -309,7 +309,7 @@ function draw() {
   // Update data bar
   const coin = getCurrentCoin();
   if (coin) {
-    updateDataBar(coin.current_price, coin.price_change_percentage_24h || 0, attractorTypeEl.textContent);
+    updateDataBar(coin.symbol, coin.current_price, coin.price_change_percentage_24h || 0, attractorTypeEl.textContent);
   }
 
   requestAnimationFrame(draw);
@@ -346,12 +346,12 @@ async function init() {
 init();
 
 // ─── DATA BAR ───
-function updateDataBar(price, change, attractor) {
+function updateDataBar(symbol, price, change, attractor) {
   const el = document.getElementById('databar');
   if (!el) return;
   const arrow = change >= 0 ? '↑' : '↓';
   const ago = Math.round((performance.now() - lastFetchTime) / 1000);
-  el.textContent = `CoinGecko · BTC $${price} ${arrow} ${Math.abs(change)}% · ${attractor} · ${ago}s ago`;
+  el.textContent = `CoinGecko · ${(symbol || '').toUpperCase()} $${price} ${arrow} ${Math.abs(change)}% · ${attractor} · ${ago}s ago`;
 }
 </script>
 </body>

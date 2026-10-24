@@ -46,7 +46,7 @@ market cap. No API key is needed.
 | Coin id | Seeds the starting point, so each coin draws a different path |
 | Every 300 steps | A faint vermillion dot, like a seal stamp |
 
-Each coin starts with 6,000 hidden warm-up steps so the drawing begins on the attractor rather than
+Each coin starts with 3,000 hidden warm-up steps so the drawing begins on the attractor rather than
 spiralling in from the origin. Every 300 frames a 2% wash of paper colour fades older strokes, and
 after 5,000 steps the page washes the paper and starts the path again. Prices refresh every two
 minutes; if CoinGecko can't be reached, a fixed three-coin fallback is used.
